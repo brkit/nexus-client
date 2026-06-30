@@ -8,6 +8,11 @@ Read these first when inspecting this repo:
 
 Use `uv` for Python commands.
 
+## Remotes and PRs
+
+- `downstream` is `brkit/nexus-client`; push feature branches there and open PRs there.
+- Prefer explicit PR commands: `gh pr create --repo brkit/nexus-client --base main --head <branch>`.
+
 ## Boundaries
 
 - `kmd_nexus_client/` is only the Nexus client library. Keep CURA config, CURA types, and robot orchestration out of it.
