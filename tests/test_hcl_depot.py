@@ -54,8 +54,7 @@ class FakeNexusClient:
         match endpoint:
             case "basket":
                 return FakeResponse(self.basket)
-            case "lendings":
-                assert kwargs["params"] == {"active": "true"}
+            case "lendings" | "lendings?active=true":
                 return FakeResponse(self.lendings)
             case "lending-detail":
                 return FakeResponse(
@@ -227,6 +226,12 @@ def make_borger() -> dict[str, Any]:
     }
 
 
+def make_borger_with_patient_scoped_lendings() -> dict[str, Any]:
+    borger = make_borger()
+    borger["_links"]["lendings"]["href"] = "lendings?patientId=12385"
+    return borger
+
+
 def make_order() -> HclProductOrder:
     return HclProductOrder(
         hmi_number="84517",
@@ -304,6 +309,36 @@ def test_order_product_for_patient_adds_updates_and_finalizes_basket() -> None:
     finalize_payload = client.posts[2][1]
     assert finalize_payload["type"] == "finalize"
     assert finalize_payload["orderedDate"] is None
+
+
+def test_order_product_preserves_patient_id_when_reading_finalized_lendings() -> None:
+    client = FakeNexusClient()
+    original_get = client.get
+
+    def get_with_patient_lendings(endpoint: str, **kwargs: Any) -> FakeResponse:
+        if endpoint == "lendings?patientId=12385&active=true":
+            return FakeResponse(client.lendings)
+        if endpoint == "lendings?active=true":
+            request = httpx.Request(
+                "GET",
+                "https://example.invalid/api/hcl-lending/lendings?active=true",
+            )
+            response = httpx.Response(400, request=request)
+            raise httpx.HTTPStatusError(
+                "Missing patientId", request=request, response=response
+            )
+        return original_get(endpoint, **kwargs)
+
+    client.get = get_with_patient_lendings  # type: ignore[method-assign]
+    hcl = HclDepotClient(client)
+
+    result = hcl.order_product_for_patient(
+        make_borger_with_patient_scoped_lendings(),
+        make_order(),
+    )
+
+    assert result.created
+    assert result.order_id == "order-1"
 
 
 def test_order_product_uses_patient_stamdata_phone_when_order_phone_is_missing() -> None:
