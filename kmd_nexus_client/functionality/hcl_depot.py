@@ -3,6 +3,7 @@
 from collections.abc import Mapping, Sequence
 from time import monotonic, sleep
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from httpx import HTTPStatusError
 
@@ -353,7 +354,7 @@ class HclDepotClient:
         if lending_link is None:
             return []
 
-        response = self.client.get(lending_link, params={"active": "true"})
+        response = self.client.get(with_query_params(lending_link, active="true"))
         lendings = response.json()
         if not isinstance(lendings, Sequence):
             return []
@@ -838,6 +839,22 @@ def link_href(payload: Mapping[str, Any], rel: str) -> str | None:
     if not isinstance(link, Mapping):
         return None
     return string_value(link.get("href"))
+
+
+def with_query_params(endpoint: str, **params: str) -> str:
+    """Return endpoint with query parameters merged into any existing query string."""
+    split = urlsplit(endpoint)
+    query_params = dict(parse_qsl(split.query, keep_blank_values=True))
+    query_params.update(params)
+    return urlunsplit(
+        (
+            split.scheme,
+            split.netloc,
+            split.path,
+            urlencode(query_params),
+            split.fragment,
+        )
+    )
 
 
 def resource_id(payload: Mapping[str, Any] | None) -> str | None:
